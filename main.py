@@ -7,6 +7,14 @@ import os
 import json
 import re
 import time
+import logging
+from dotenv import load_dotenv
+
+load_dotenv()
+
+# Configure logging
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+logger = logging.getLogger(__name__)
 
 app = FastAPI()
 
@@ -22,7 +30,10 @@ app.add_middleware(
     allow_headers=["*"],   # 🔥 allow all headers
 )
 # 🔑 API CONFIG
-genai.configure(api_key="your api key", transport="rest")
+api_key = os.environ.get("GEMINI_API_KEY")
+if not api_key:
+    raise RuntimeError("GEMINI_API_KEY environment variable is not set. Please configure it.")
+genai.configure(api_key=api_key, transport="rest")
 
 # 🤖 MODEL (IMPORTANT: OUTSIDE LOOP)
 model = genai.GenerativeModel("gemini-2.5-flash-lite")
@@ -60,6 +71,13 @@ def safe_generate(prompt, retries=3):
                 raise e
 
     raise Exception("Gemini API failed after retries")
+
+
+# 💓 HEALTH CHECK API
+@app.get("/health")
+async def health_check():
+    logger.info("Health check endpoint was accessed")
+    return {"status": "ok", "message": "Service is extremely healthy 😊"}
 
 
 # 🚀 MAIN API
