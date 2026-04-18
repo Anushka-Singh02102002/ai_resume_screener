@@ -1,5 +1,7 @@
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
-from typing import List, Annotated
+from fastapi.responses import StreamingResponse
+from typing import List, Annotated, Dict, Any
+from pydantic import BaseModel
 import google.generativeai as genai
 import pdfplumber
 import tempfile
@@ -37,6 +39,11 @@ genai.configure(api_key=api_key, transport="rest")
 
 # 🤖 MODEL (IMPORTANT: OUTSIDE LOOP)
 model = genai.GenerativeModel("gemini-2.5-flash-lite")
+
+class ChatRequest(BaseModel):
+    question: str
+    context: List[Dict[str, Any]]
+    history: List[Dict[str, Any]] = []
 
 
 # 📄 PDF TEXT EXTRACTION
@@ -166,3 +173,37 @@ Format:
         "total_resumes": len(results),
         "results": results
     }
+
+
+# 💬 CHAT API
+@app.post("/chat/")
+async def chat_resumes(request: ChatRequest):
+    if not request.context:
+        raise HTTPException(status_code=400, detail="No resume context provided")
+
+    prompt = f"""
+You are an expert AI recruiting assistant. You are helping a recruiter answer questions about a batch of candidates.
+
+Context (Analyzed Resumes):
+{json.dumps(request.context, indent=2)}
+
+Chat History:
+{json.dumps(request.history, indent=2)}
+
+Recruiter's Question:
+{request.question}
+
+Provide a clear, concise, and helpful answer to the recruiter's question based ONLY on the provided context.
+"""
+
+    def event_stream():
+        try:
+            response = model.generate_content(prompt, stream=True)
+            for chunk in response:
+                if chunk.text:
+                    # SSE format
+                    yield f"data: {json.dumps({'text': chunk.text})}\n\n"
+        except Exception as e:
+            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
