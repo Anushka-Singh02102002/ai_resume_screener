@@ -26,18 +26,17 @@ from fastapi.middleware.cors import CORSMiddleware
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],   # 🔥 allow all
+    allow_origins=["*"],   
     allow_credentials=True,
-    allow_methods=["*"],   # 🔥 allow all methods
-    allow_headers=["*"],   # 🔥 allow all headers
+    allow_methods=["*"],  
+    allow_headers=["*"],  
 )
-# 🔑 API CONFIG
+# API CONFIG
 api_key = os.environ.get("GEMINI_API_KEY")
 if not api_key:
     raise RuntimeError("GEMINI_API_KEY environment variable is not set. Please configure it.")
 genai.configure(api_key=api_key, transport="rest")
 
-# 🤖 MODEL (IMPORTANT: OUTSIDE LOOP)
 model = genai.GenerativeModel("gemini-2.5-flash-lite")
 
 class ChatRequest(BaseModel):
@@ -46,7 +45,6 @@ class ChatRequest(BaseModel):
     history: List[Dict[str, Any]] = []
 
 
-# 📄 PDF TEXT EXTRACTION
 def extract_text(file_path: str) -> str:
     text = ""
     try:
@@ -61,7 +59,6 @@ def extract_text(file_path: str) -> str:
     return text
 
 
-# 🔁 SAFE GEMINI CALL (FIXES 429 ERROR)
 def safe_generate(prompt, retries=3):
     for i in range(retries):
         try:
@@ -80,14 +77,12 @@ def safe_generate(prompt, retries=3):
     raise Exception("Gemini API failed after retries")
 
 
-# 💓 HEALTH CHECK API
 @app.get("/health")
 async def health_check():
     logger.info("Health check endpoint was accessed")
-    return {"status": "ok", "message": "Service is extremely healthy 😊"}
+    return {"status": "ok", "message": "Service is extremely healthy "}
 
 
-# 🚀 MAIN API
 @app.post("/analyze/")
 async def analyze_resumes(
     files: Annotated[List[UploadFile], File()],
@@ -103,22 +98,22 @@ async def analyze_resumes(
         temp_path = None
 
         try:
-            # 📌 Save temp file
+
             with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
                 tmp.write(await file.read())
                 temp_path = tmp.name
 
-            # 📌 Extract text
+        
             resume_text = extract_text(temp_path)
 
-            # ❌ Skip empty PDFs
+        
             if not resume_text.strip():
                 raise Exception("Empty or unreadable PDF")
 
-            # ✂️ REDUCE TOKEN USAGE (IMPORTANT)
+            
             resume_text = resume_text[:4000]
 
-            # 🧠 PROMPT
+    
             prompt = f"""
 You are an ATS system.
 
@@ -140,12 +135,12 @@ Format:
 }}
 """
 
-            # 🤖 CALL GEMINI (SAFE)
+        
             response = safe_generate(prompt)
 
             text_response = response.text.strip()
 
-            # 📌 Extract JSON safely
+            
             match = re.search(r"\{.*\}", text_response, re.DOTALL)
             if not match:
                 raise Exception("Invalid JSON from model")
@@ -166,7 +161,7 @@ Format:
             if temp_path and os.path.exists(temp_path):
                 os.remove(temp_path)
 
-    # 🏆 SORT RESULTS
+
     results.sort(key=lambda x: x.get("score", 0), reverse=True)
 
     return {
@@ -175,7 +170,6 @@ Format:
     }
 
 
-# 💬 CHAT API
 @app.post("/chat/")
 async def chat_resumes(request: ChatRequest):
     if not request.context:
